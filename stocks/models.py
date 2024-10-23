@@ -1,6 +1,7 @@
 from django.db import models
 
 
+# 주식 종목
 class Stock(models.Model):
     isin_code = models.CharField(max_length=50, verbose_name="ISIN 코드")
     srtn_code = models.CharField(max_length=50, verbose_name="단축 코드")
@@ -11,6 +12,7 @@ class Stock(models.Model):
         return self.itms_name
 
 
+# 주식 종목 일별 데이터
 class DailyStockData(models.Model):
     bas_dt = models.DateField(null=False, verbose_name="기준일자")  # 기준일자
     clpr = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="종가")
@@ -30,11 +32,13 @@ class DailyStockData(models.Model):
     )
 
 
+# 주차별 추천
 class WeeklyStockRecommendation(models.Model):
     start_date = models.DateField(null=False)
     end_date = models.DateField(null=False)
 
 
+# 주차별 추천 주식 종목
 class WeeklyStockRecommendationStock(models.Model):
     weekly_stock_recommendation = models.ForeignKey(
         WeeklyStockRecommendation,
