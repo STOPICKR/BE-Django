@@ -1,0 +1,32 @@
+from rest_framework import status
+from rest_framework.exceptions import APIException
+
+
+class ApiRequestFailureException(APIException):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    default_detail = "API 요청 중 오류가 발생했습니다."
+    default_code = "api_request_failure"
+
+
+class ApiResponseParseFailureException(APIException):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    default_detail = "API 응답 처리 중 오류가 발생했습니다."
+    default_code = "api_response_parse_failure"
+
+
+class HttpStatusCodeFailureException(APIException):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    default_detail = "API 응답 상태 코드가 200이 아닙니다."
+    default_code = "http_status_code_failure"
+
+
+class DataValidationFailureException(APIException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_detail = "유효하지 않은 데이터입니다."
+    default_code = "data_validation_failure"
+
+
+class DatabaseSaveFailureException(APIException):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    default_detail = "데이터베이스 저장 중 오류가 발생했습니다."
+    default_code = "database_save_failure"
