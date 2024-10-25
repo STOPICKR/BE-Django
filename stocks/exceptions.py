@@ -30,3 +30,9 @@ class DatabaseSaveFailureException(APIException):
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     default_detail = "데이터베이스 저장 중 오류가 발생했습니다."
     default_code = "database_save_failure"
+
+
+class StockSearchFailureException(APIException):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    default_detail = "주식 검색 중 오류가 발생했습니다."
+    default_code = "stock_search_failure"

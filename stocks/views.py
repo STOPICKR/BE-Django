@@ -12,7 +12,7 @@ from stocks.exceptions import (
     ApiRequestFailureException,
     ApiResponseParseFailureException,
     HttpStatusCodeFailureException,
-    DatabaseSaveFailureException
+    DatabaseSaveFailureException, StockSearchFailureException
 )
 from stocks.models import Stock
 from stocks.serializers import StockSerializer, StockSearchResponseSerializer
@@ -21,7 +21,29 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-# 공공 데이터 포탈에서 한국 주식 정보 받아오기
+# 주식 이름으로 검색 (admin 용)
+class StockSearchView(GenericAPIView):
+    serializer_class = StockSearchResponseSerializer
+
+    def get(self, request):
+        query = request.GET.get('query')
+
+        if not query:
+            return Response({"error": "쿼리 문이 있어야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        stocks = self.search_stocks(query)
+        stock_response_serializer = self.get_serializer(stocks, many=True)
+
+        return Response(stock_response_serializer.data, status=status.HTTP_200_OK)
+
+    def search_stocks(self, query):
+        try:
+            return Stock.objects.filter(itms_name__icontains=query)
+        except Exception:
+            raise StockSearchFailureException
+
+
+# 공공 데이터 포탈에서 한국 주식 정보 받아오기 (admin 용)
 class FetchAllStocksInfoView(GenericAPIView):
     serializer_class = StockSerializer
 
