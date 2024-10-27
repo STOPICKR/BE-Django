@@ -16,7 +16,7 @@ from stocks.exceptions import (
     WeeklyRecommendationNotFoundException, WeeklyRecommendationStockSaveException,
     WeeklyRecommendationStockDeleteException,
 )
-from stocks.models import Stock, WeeklyRecommendation, WeeklyRecommendationStock
+from stocks.models import Stock, WeeklyRecommendation, WeeklyRecommendationStock, DailyStockData
 from stocks.serializers import StockSerializer
 from django.conf import settings
 
@@ -227,3 +227,114 @@ class AddStockToWeeklyView(GenericAPIView):
         except Exception:
             logger.error(f"error : {str(weekly_recommendation)}")
             raise WeeklyRecommendationStockDeleteException()
+
+
+class FetchWeeklyStockDailyDataView(GenericAPIView):
+
+    def post(self, request):
+        stock_requests = request.data
+
+        if len(stock_requests) != 10:
+            return Response({"error": "10개의 주식을 선택해야 데이터를 저장할 수 있습니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            for stock_request in stock_requests:
+                isin_cd = stock_request.get('isinCd')
+
+                if not (isin_cd):
+                    return Response({"error": "주식 코드가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+                # 주식 데이터를 가져와 저장하는 함수 호출
+                self.fetch_and_save_stock_data_by_code_and_date(isin_cd)
+
+            return Response({"message": "주식 데이터가 성공적으로 저장되었습니다."}, status=status.HTTP_200_OK)
+
+        except (ApiRequestFailureException, ApiResponseParseFailureException, DatabaseSaveFailureException) as e:
+            logger.error(f"주식 데이터를 저장하는 중 오류 발생: {str(e)}")
+            return Response({"error": "주식 데이터를 저장하는 중 오류가 발생했습니다."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def fetch_and_save_stock_data_by_code_and_date(self, isin_cd):
+        """
+        공공 데이터 포털 API에서 주식 데이터를 가져와 저장하는 로직
+        """
+        url_template = "http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo"
+
+        # 종료 날짜는 현재 날짜로, 시작 날짜는 현재 날짜로부터 1년 전으로 설정
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365)
+
+        formatted_start_date = start_date.strftime("%Y%m%d")  # 1년 전 날짜
+        formatted_end_date = end_date.strftime("%Y%m%d")  # 현재 날짜
+
+        page_no = 1
+        num_of_rows = 100
+
+        while True:
+            params = {
+                "serviceKey": settings.PUBLIC_DATA_SECRET_KEY,
+                "resultType": "json",
+                "beginBasDt": formatted_start_date,
+                "endBasDt": formatted_end_date,
+                "isinCd": isin_cd,
+                "pageNo": page_no,
+                "numOfRows": num_of_rows
+            }
+            response = requests.get(url_template, params=params)
+
+            if response.status_code != 200:
+                raise HttpStatusCodeFailureException()
+
+            data = response.json()
+            items = data.get('response', {}).get('body', {}).get('items', {}).get('item', [])
+
+            if not items:
+                break  # 데이터가 더 이상 없을 때 루프 종료
+
+            # 주식 데이터 저장 로직
+            self.save_stock_data(isin_cd, items)
+            page_no += 1
+
+    def save_stock_data(self, isin_cd, items):
+        """
+        API로 가져온 데이터를 데이터베이스에 저장하는 로직
+        """
+        try:
+            stock = Stock.objects.get(isin_code=isin_cd)
+        except Stock.DoesNotExist:
+            raise StockNotFoundException(f"ISIN 코드 {isin_cd}에 해당하는 주식을 찾을 수 없습니다.")
+
+        for item in items:
+            bas_dt = datetime.strptime(item.get('basDt'), '%Y%m%d').date()  # 기준일자
+            clpr = item.get('clpr')  # 종가
+            hipr = item.get('hipr')  # 고가
+            lopr = item.get('lopr')  # 저가
+            mkp = item.get('mkp')  # 시가
+            vs = item.get('vs')  # 대비
+            flt_rt = item.get('fltRt')  # 등락률
+            trqu = item.get('trqu')  # 거래량
+            tr_prc = item.get('trPrc')  # 거래대금
+            lstg_st_cnt = item.get('lstgStCnt')  # 상장주식수
+            mrkt_tot_amt = item.get('mrktTotAmt')  # 시가총액
+
+            # 기존 데이터 중복 삽입 방지
+            if not DailyStockData.objects.filter(stock=stock, bas_dt=bas_dt).exists():
+                # 데이터 저장
+                try:
+                    DailyStockData.objects.create(
+                        stock=stock,
+                        bas_dt=bas_dt,
+                        clpr=clpr,
+                        hipr=hipr,
+                        lopr=lopr,
+                        mkp=mkp,
+                        vs=vs,
+                        flt_rt=flt_rt,
+                        trqu=trqu,
+                        tr_prc=tr_prc,
+                        lstg_st_cnt=lstg_st_cnt,
+                        mrkt_tot_amt=mrkt_tot_amt
+                    )
+                    logger.info(f"ISIN 코드 {isin_cd}의 주식 데이터가 {bas_dt}일자로 저장되었습니다.")
+                except Exception as e:
+                    logger.error(f"데이터베이스 저장 실패: {str(e)}")
+                    raise DatabaseSaveFailureException()
