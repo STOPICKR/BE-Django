@@ -6,7 +6,7 @@ class Stock(models.Model):
     isin_code = models.CharField(max_length=50, verbose_name="ISIN 코드")
     srtn_code = models.CharField(max_length=50, verbose_name="단축 코드")
     itms_name = models.CharField(max_length=50, verbose_name="종목 명")
-    mrkt_cls = models.CharField(max_length=50, verbose_name="시장 구분")
+    mrkt_cls = models.CharField(max_length=50, verbose_name="시장 구분", default="Unknown")
 
     def __str__(self):
         return self.itms_name
