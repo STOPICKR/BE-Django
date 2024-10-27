@@ -52,5 +52,11 @@ class WeeklyRecommendationNotFoundException(APIException):
 
 class WeeklyRecommendationStockSaveException(APIException):
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    default_detail = "주간 추천 주식 저장중 오류가 발생했습니다."
+    default_detail = "주간 추천 주식 저장 중 오류가 발생했습니다."
     default_code = "weekly_recommendation_stock_save_failure"
+
+
+class WeeklyRecommendationStockDeleteException(APIException):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    default_detail = "주간 추천 주식 삭제 중 오류가 발생했습니다."
+    default_code = "weekly_recommendation_stock_delete_failure"

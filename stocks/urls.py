@@ -11,7 +11,6 @@ urlpatterns = [
     path('weekly/', WeeklyRecommendationStocksView.as_view(), name='weekly_stocks'),
     # 주차별 주식 추가 (POST)
     path('weekly/<int:stock_id>', AddStockToWeeklyView.as_view(), name='add_weekly_stock'),
-    # path('stocks/weekly/<int:stock_id>/remove/', RemoveStockFromWeeklyView.as_view(), name='remove_weekly_stock'),  # 주차별 주식 제거 (DELETE)
     # path('stocks/data/', FetchMultipleStockDataView.as_view(), name='stock_data'),  # 다수의 주식 데이터 (POST)
     # path('stocks/info/', FetchAllStocksInfoView.as_view(), name='stock_info'),  # 전체 주식 정보 가져오기 (POST)
     # path('stocks/weekly/latest/', LatestWeeklyStocksDataView.as_view(), name='latest_weekly_stocks'),  # 최신 주차별 주식 데이터 (GET)

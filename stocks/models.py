@@ -43,6 +43,7 @@ class WeeklyRecommendation(models.Model):
     def __str__(self):
         return f"{self.start_date} - {self.end_date}"
 
+
 # 주차별 추천 주식 종목
 class WeeklyRecommendationStock(models.Model):
     weekly_recommendation = models.ForeignKey(
@@ -55,4 +56,4 @@ class WeeklyRecommendationStock(models.Model):
     )
 
     def __str__(self):
-        return f"{self.stock} / {self.weekly_recommendation}"
+        return f"{self.stock} - {self.weekly_recommendation}"

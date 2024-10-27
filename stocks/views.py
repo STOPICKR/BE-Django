@@ -14,6 +14,7 @@ from stocks.exceptions import (
     HttpStatusCodeFailureException,
     DatabaseSaveFailureException, StockSearchFailureException, StockNotFoundException,
     WeeklyRecommendationNotFoundException, WeeklyRecommendationStockSaveException,
+    WeeklyRecommendationStockDeleteException,
 )
 from stocks.models import Stock, WeeklyRecommendation, WeeklyRecommendationStock
 from stocks.serializers import StockSerializer
@@ -175,6 +176,24 @@ class AddStockToWeeklyView(GenericAPIView):
 
         return Response({"message": "주식이 주차별 추천 목록에 추가되었습니다."}, status=status.HTTP_200_OK)
 
+    def delete(self, request, stock_id):
+        # URL 파라미터로부터 시작 날짜 받기 (request.GET 사용)
+        start_date_str = request.GET.get('startDate')
+
+        if not start_date_str:
+            return Response({"error": "시작 날짜를 제공해야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 받은 날짜 문자열을 datetime 객체로 변환
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({"error": "날짜 형식이 잘못되었습니다. 'YYYY-MM-DD' 형식이어야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 주차별 주식 삭제 로직
+        self.delete_stock_from_weekly(start_date, stock_id)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     def add_stock_to_weekly(self, start_date, stock_id):
         try:
             stock = Stock.objects.get(id=stock_id)
@@ -194,4 +213,17 @@ class AddStockToWeeklyView(GenericAPIView):
         except Exception:
             raise WeeklyRecommendationStockSaveException()
 
+    def delete_stock_from_weekly(self, start_date, stock_id):
+        try:
+            stock = Stock.objects.get(id=stock_id)
+        except Exception:
+            logger.error(f"error : {str(stock_id)}")
+            raise StockNotFoundException()
 
+        try:
+            weekly_recommendation = WeeklyRecommendation.objects.get(start_date=start_date)
+            weekly_recommendation_stock = WeeklyRecommendationStock.objects.get(weekly_recommendation=weekly_recommendation, stock=stock)
+            weekly_recommendation_stock.delete()
+        except Exception:
+            logger.error(f"error : {str(weekly_recommendation)}")
+            raise WeeklyRecommendationStockDeleteException()
