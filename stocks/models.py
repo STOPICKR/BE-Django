@@ -31,20 +31,28 @@ class DailyStockData(models.Model):
         verbose_name="종목",
     )
 
+    def __str__(self):
+        return f"{self.stock} - {self.bas_dt}"
+
 
 # 주차별 추천
-class WeeklyStockRecommendation(models.Model):
+class WeeklyRecommendation(models.Model):
     start_date = models.DateField(null=False)
     end_date = models.DateField(null=False)
 
+    def __str__(self):
+        return f"{self.start_date} - {self.end_date}"
 
 # 주차별 추천 주식 종목
-class WeeklyStockRecommendationStock(models.Model):
-    weekly_stock_recommendation = models.ForeignKey(
-        WeeklyStockRecommendation,
+class WeeklyRecommendationStock(models.Model):
+    weekly_recommendation = models.ForeignKey(
+        WeeklyRecommendation,
         on_delete=models.CASCADE,
     )
     stock = models.ForeignKey(
         Stock,
         on_delete=models.CASCADE,
     )
+
+    def __str__(self):
+        return f"{self.stock} / {self.weekly_recommendation}"

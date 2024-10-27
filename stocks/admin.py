@@ -5,5 +5,5 @@ from stocks.models import *
 # Register your models here.
 admin.site.register(Stock)
 admin.site.register(DailyStockData)
-admin.site.register(WeeklyStockRecommendation)
-admin.site.register(WeeklyStockRecommendationStock)
+admin.site.register(WeeklyRecommendation)
+admin.site.register(WeeklyRecommendationStock)

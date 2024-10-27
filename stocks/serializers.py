@@ -9,11 +9,6 @@ class StockSerializer(serializers.Serializer):
     mrkt_cls = serializers.CharField(max_length=50)
 
 
-class StockSearchResponseSerializer(serializers.Serializer):
-    isin_code = serializers.CharField(max_length=50)
-    itms_name = serializers.CharField(max_length=50)
-
-
 class DailyStockDataSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     bas_dt = serializers.DateTimeField()
@@ -30,11 +25,11 @@ class DailyStockDataSerializer(serializers.Serializer):
     stock_id = serializers.IntegerField()
 
 
-class WeeklyStockRecommendationSerializer(serializers.Serializer):
+class WeeklyRecommendationSerializer(serializers.Serializer):
     start_date = serializers.DateField()
     end_date = serializers.DateField()
 
 
-class WeeklyStockRecommendationStockSerializer(serializers.Serializer):
+class WeeklyRecommendationStockSerializer(serializers.Serializer):
     weekly_stock_recommendation_id = serializers.IntegerField()
     stock_id = serializers.IntegerField()

@@ -44,13 +44,13 @@ class StockNotFoundException(APIException):
     default_code = "stock_not_found_failure"
 
 
-class WeeklyStockRecommendationException(APIException):
+class WeeklyRecommendationNotFoundException(APIException):
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    default_detail = "주간 추천 주식 저장 중 오류가 발생했습니다."
-    default_code = "weekly_stock_recommendation_failure"
+    default_detail = "주간 추천이 존재하지 않습니다."
+    default_code = "weekly_recommendation_not_exist_failure"
 
 
-class WeeklyStockRecommendationRetrieveFailureException(APIException):
+class WeeklyRecommendationStockSaveException(APIException):
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    default_detail = "주간 추천 주식 검색 중 오류가 발생했습니다."
-    default_code = "weekly_stock_recommendation_retrieve_failure"
+    default_detail = "주간 추천 주식 저장중 오류가 발생했습니다."
+    default_code = "weekly_recommendation_stock_save_failure"

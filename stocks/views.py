@@ -13,10 +13,10 @@ from stocks.exceptions import (
     ApiResponseParseFailureException,
     HttpStatusCodeFailureException,
     DatabaseSaveFailureException, StockSearchFailureException, StockNotFoundException,
-    WeeklyStockRecommendationException, WeeklyStockRecommendationRetrieveFailureException
+    WeeklyRecommendationNotFoundException, WeeklyRecommendationStockSaveException,
 )
-from stocks.models import Stock, WeeklyStockRecommendation, WeeklyStockRecommendationStock
-from stocks.serializers import StockSerializer, StockSearchResponseSerializer
+from stocks.models import Stock, WeeklyRecommendation, WeeklyRecommendationStock
+from stocks.serializers import StockSerializer
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # 주식 이름으로 검색 (admin 용)
 class StockSearchView(GenericAPIView):
-    serializer_class = StockSearchResponseSerializer
+    serializer_class = StockSerializer
 
     def get(self, request):
         query = request.GET.get('query')
@@ -117,7 +117,7 @@ class FetchAllStocksInfoView(GenericAPIView):
 
 
 # 주차별 추천 주식 불러오기
-class WeeklyStocksView(GenericAPIView):
+class WeeklyRecommendationStocksView(GenericAPIView):
     serializer_class = StockSerializer
 
     def get(self, request):
@@ -141,55 +141,57 @@ class WeeklyStocksView(GenericAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def get_weekly_stocks(self, start_date):
-        # 해당 시작 날짜의 주차별 주식 추천을 가져옴
         try:
-            weekly_stock_recommendation = WeeklyStockRecommendation.objects.filter(start_date=start_date)
+            weekly_recommendation = WeeklyRecommendation.objects.get(start_date=start_date)
         except Exception:
-            raise WeeklyStockRecommendationRetrieveFailureException()
+            raise WeeklyRecommendationNotFoundException()
+
+        try:
+            weekly_stocks = WeeklyRecommendationStock.objects.filter(weekly_recommendation=weekly_recommendation).select_related('stock')
+            return [stock_relation.stock for stock_relation in weekly_stocks]
+        except Exception:
+            logger.error(f"error : {str(weekly_recommendation)}")
+            raise StockNotFoundException()
 
 
-# 주차별 추천 10개 주식에 추가
-class AddWeeklyStocksView(GenericAPIView):
+# 주차별 추천 리스트에 주식에 추가
+class AddStockToWeeklyView(GenericAPIView):
 
     def post(self, request, stock_id):
-        start_date_str = request.data.get('startDate')
+        # URL 파라미터로부터 시작 날짜 받기 (request.GET 사용)
+        start_date_str = request.GET.get('startDate')
 
         if not start_date_str:
-            return Response({"error": "startDate가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "시작 날짜를 제공해야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            start_date = self.parse_date(start_date_str)
+            # 받은 날짜 문자열을 datetime 객체로 변환
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         except ValueError:
-            return Response({"error": "날짜 형식이 잘못되었습니다."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "날짜 형식이 잘못되었습니다. 'YYYY-MM-DD' 형식이어야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            self.add_stock_to_weekly(start_date, stock_id)
-            return Response({"message": "주식이 주간 추천 목록에 성공적으로 추가되었습니다."}, status=status.HTTP_200_OK)
-        except Exception:
-            raise WeeklyStockRecommendationException()
+        # 주차별 주식 추가 로직
+        self.add_stock_to_weekly(start_date, stock_id)
+
+        return Response({"message": "주식이 주차별 추천 목록에 추가되었습니다."}, status=status.HTTP_200_OK)
 
     def add_stock_to_weekly(self, start_date, stock_id):
         try:
             stock = Stock.objects.get(id=stock_id)
-        except Stock.DoesNotExist:
+        except Exception:
             raise StockNotFoundException()
 
-        # 주차별 추천 주식 목록을 찾거나 새로 만듭니다.
-        weekly_stocks, created = WeeklyStockRecommendation.objects.get_or_create(
-            start_date=start_date,
-            defaults={'end_date': start_date + timedelta(days=6)}
-        )
-
-        # 이미 주간 추천에 해당 주식이 있는지 확인합니다.
-        if not weekly_stocks.stocks.filter(stock=stock).exists():
-            weekly_stock_recommendation_stock = WeeklyStockRecommendationStock(
-                stock=stock,
-                weekly_stock_recommendation=weekly_stocks
+        try:
+            weekly_recommendation, created = WeeklyRecommendation.objects.get_or_create(
+                start_date=start_date,
+                defaults={'end_date': start_date + timedelta(days=6)}
             )
-            weekly_stock_recommendation_stock.save()  # 새로운 추천 주식을 저장합니다.
-        else:
-            raise WeeklyStockRecommendationException()
+            weekly_recommendation_stock = WeeklyRecommendationStock(
+                weekly_recommendation=weekly_recommendation,
+                stock=stock
+            )
+            weekly_recommendation_stock.save()
+        except Exception:
+            raise WeeklyRecommendationStockSaveException()
 
-    def parse_date(self, date_str):
-        from datetime import datetime
-        return datetime.strptime(date_str, "%Y-%m-%d").date()  # yyyy-MM-dd 형식의 문자열을 date로 변환
+
