@@ -17,7 +17,7 @@ from stocks.exceptions import (
     WeeklyRecommendationStockDeleteException,
 )
 from stocks.models import Stock, WeeklyRecommendation, WeeklyRecommendationStock, DailyStockData
-from stocks.serializers import StockSerializer
+from stocks.serializers import StockSerializer, DailyStockDataSerializer, DailyStockDataWithStockSerializer
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -338,3 +338,72 @@ class FetchWeeklyStockDailyDataView(GenericAPIView):
                 except Exception as e:
                     logger.error(f"데이터베이스 저장 실패: {str(e)}")
                     raise DatabaseSaveFailureException()
+
+
+class LatestWeeklyStocksDataView(GenericAPIView):
+    serializer_class = DailyStockDataWithStockSerializer
+
+    def get(self, request):
+        try:
+            response_data = self.get_latest_weekly_stocks_data()
+            if not response_data:
+                return Response({"message": "No content"}, status=status.HTTP_204_NO_CONTENT)
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error retrieving weekly stocks: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def get_latest_weekly_stocks_data(self):
+        # Step 1: 최근 주차 추천 불러오기
+        latest_weekly_stocks = self.get_latest_weekly_recommendation()
+        if latest_weekly_stocks is None:
+            return []
+
+        # Step 2: Define the date range (one year from now)
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=365)
+
+        # Step 3: Get the stocks from WeeklyRecommendationStock
+        stock_data_list = []
+        for weekly_stock in latest_weekly_stocks:
+            stock = weekly_stock.stock
+
+            # Step 4: Get stock data for the date range
+            daily_stock_data = self.get_stock_data_by_date_range(stock, start_date, end_date)
+
+            # Step 5: Append the stock with data to the response list
+            stock_data_list.append({
+                'isin_code': stock.isin_code,
+                'itms_name': stock.itms_name,
+                'daily_stock_data': daily_stock_data
+            })
+
+        return stock_data_list
+
+    def get_latest_weekly_recommendation(self):
+        try:
+            # Step 1: Get the latest WeeklyRecommendation
+            latest_weekly_recommendation = WeeklyRecommendation.objects.latest('start_date')
+
+            # Step 2: Get related WeeklyRecommendationStock entries
+            return WeeklyRecommendationStock.objects.filter(weekly_recommendation=latest_weekly_recommendation)
+        except WeeklyRecommendation.DoesNotExist:
+            raise WeeklyRecommendationNotFoundException("No weekly recommendation data found.")
+        except Exception as e:
+            logger.error(f"Error retrieving weekly recommendations: {str(e)}")
+            raise WeeklyRecommendationNotFoundException("Error retrieving weekly recommendations.")
+
+    def get_stock_data_by_date_range(self, stock, start_date, end_date):
+        try:
+            # Step 1: Get DailyStockData for the given stock and date range
+            daily_stock_data = DailyStockData.objects.filter(stock=stock, bas_dt__range=[start_date, end_date])
+
+            # Step 2: Serialize the DailyStockData using the StockDataResponseDto serializer
+            serializer = DailyStockDataSerializer(daily_stock_data, many=True)
+
+            return serializer.data
+        except DailyStockData.DoesNotExist:
+            raise StockNotFoundException(f"Daily stock data for ISIN code {stock.isin_code} not found.")
+        except Exception as e:
+            logger.error(f"Error querying daily stock data for {stock.isin_code}: {str(e)}")
+            raise StockNotFoundException(f"Error retrieving stock data for ISIN code {stock.isin_code}.")
