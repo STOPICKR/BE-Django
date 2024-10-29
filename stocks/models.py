@@ -76,6 +76,7 @@ class WeeklyRecommendationStockTestResult(models.Model):
 
 class WeeklyRecommendationStockPredictResult(models.Model):
     action = models.CharField(max_length=50)
+    target_date = models.DateField()
     stock = models.ForeignKey(
         Stock,
         on_delete=models.CASCADE,

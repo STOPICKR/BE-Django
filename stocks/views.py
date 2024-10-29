@@ -22,7 +22,7 @@ from stocks.exceptions import (
     WeeklyRecommendationStockDeleteException,
 )
 from stocks.models import Stock, WeeklyRecommendation, WeeklyRecommendationStock, DailyStockData, \
-    WeeklyRecommendationStockTestResult
+    WeeklyRecommendationStockTestResult, WeeklyRecommendationStockPredictResult
 from stocks.serializers import StockSerializer, DailyStockDataSerializer, DailyStockDataWithStockSerializer
 from django.conf import settings
 
@@ -494,18 +494,19 @@ class StockAITestView(GenericAPIView):
 
         return average_profit
 
+
 class StockAIPredictView(GenericAPIView):
 
     def post(self, request):
         # 주식 예측 실행
         self.predict_and_save_weekly_stocks()
-        return JsonResponse({"message": "주식 테스트 및 예측이 완료되었습니다."}, status=200)
+        return Response({"message": "주식 테스트 및 예측이 완료되었습니다."}, status=200)
 
     def start_prediction(self, stock_name, days_ago, window_size):
         """
         Django에서 외부 API로 예측 요청을 보냄
         """
-        url = f"http://127.0.0.1:8000/api/predict/?stock={stock_name}&days_ago={days_ago}&window_size={window_size}"
+        url = f"http://127.0.0.1:8080/api/predict/?stock={stock_name}&days_ago={days_ago}&window_size={window_size}"
         response = requests.get(url)
         return response
 
@@ -523,11 +524,11 @@ class StockAIPredictView(GenericAPIView):
             stock_name = stock.srtn_code
 
             # 각 주식에 대해 예측을 실행하고 저장
-            self.save_prediction_result(stock, stock_name)
+            self.save_prediction_result(stock, stock_name, latest_weekly_recommendation)
 
         return {"message": "Weekly stocks predicted and saved successfully"}
 
-    def save_prediction_result(self, stock, stock_name):
+    def save_prediction_result(self, stock, stock_name, latest_weekly_recommendation):
         """
         외부 API를 호출하여 예측 후 결과를 저장하는 함수
         """
@@ -535,15 +536,16 @@ class StockAIPredictView(GenericAPIView):
         response = self.start_prediction(stock_name, 0, 10)
         if response.status_code == 200:
             prediction_result_data = response.json()
-            self.save_prediction_result_to_db(stock, prediction_result_data)
+            self.save_prediction_result_to_db(stock, prediction_result_data, latest_weekly_recommendation)
 
-    def save_prediction_result_to_db(self, stock, prediction_result_data):
+    def save_prediction_result_to_db(self, stock, prediction_result_data, latest_weekly_recommendation):
         """
         예측 결과를 데이터베이스에 저장
         """
         # 예측 결과를 데이터베이스에 저장
-        PredictionResult.objects.create(
+        WeeklyRecommendationStockPredictResult.objects.create(
             stock=stock,
+            weekly_recommendation=latest_weekly_recommendation,
             action=prediction_result_data.get('action'),
             target_date=prediction_result_data.get('target_date')
         )
