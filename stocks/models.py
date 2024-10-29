@@ -57,3 +57,33 @@ class WeeklyRecommendationStock(models.Model):
 
     def __str__(self):
         return f"{self.stock} - {self.weekly_recommendation}"
+
+
+class WeeklyRecommendationStockTestResult(models.Model):
+    profit = models.DecimalField(max_digits=10, decimal_places=2)
+    stock = models.ForeignKey(
+        Stock,
+        on_delete=models.CASCADE,
+    )
+    weekly_recommendation = models.ForeignKey(
+        WeeklyRecommendation,
+        on_delete=models.CASCADE,
+    )
+
+    def __str__(self):
+        return f"{self.stock} - {self.weekly_recommendation}"
+
+
+class WeeklyRecommendationStockPredictResult(models.Model):
+    action = models.CharField(max_length=50)
+    stock = models.ForeignKey(
+        Stock,
+        on_delete=models.CASCADE,
+    )
+    weekly_recommendation = models.ForeignKey(
+        WeeklyRecommendation,
+        on_delete=models.CASCADE,
+    )
+
+    def __str__(self):
+        return f"{self.stock} - {self.weekly_recommendation}"
