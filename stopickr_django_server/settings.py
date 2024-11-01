@@ -54,11 +54,13 @@ AUTH_USER_MODEL = "users.User"
 
 ALLOWED_HOSTS = [
     AWS_LAMBDA_URL,
+    "localhost",
 ]
 
 CORS_ALLOWED_ORIGINS = [
     "https://stopickr.com",
     "http://stopickr.com",
+    "http://localhost:3000",
 ]
 
 # Application definition
@@ -117,16 +119,16 @@ WSGI_APPLICATION = 'stopickr_django_server.wsgi.application'
 #     }
 # }
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': DATABASE_NAME,
-        'USER': DATABASE_USER,
-        'PASSWORD': DATABASE_PASSWORD,
-        'HOST': DATABASE_HOST,
-        'PORT': DATABASE_PORT,
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': DATABASE_NAME,
+#         'USER': DATABASE_USER,
+#         'PASSWORD': DATABASE_PASSWORD,
+#         'HOST': DATABASE_HOST,
+#         'PORT': DATABASE_PORT,
+#     }
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
