@@ -1,12 +1,8 @@
-import asyncio
-import json
 import logging
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 import requests
-from asgiref.sync import sync_to_async
 from django.core.exceptions import ObjectDoesNotExist
-from django.utils.dateparse import parse_date
 from rest_framework.exceptions import APIException
 
 from rest_framework.generics import GenericAPIView
@@ -428,8 +424,8 @@ class StockAITestView(GenericAPIView):
         """
         print(f"Sending test request with test_runs={test_runs} for stock {stock_srtn_code}")
 
-        # url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/test/?stock={stock_name}&start_date={stock_srtn_code}&test_runs={test_runs}&window_size={window_size}"
-        url = f"http://127.0.0.1:8080/api/test/?stock={stock_name}&start_date={stock_srtn_code}&test_runs={test_runs}&window_size={window_size}"
+        # 외부 API에 테스트 요청을 보냄
+        url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/test/?stock={stock_name}&start_date={stock_srtn_code}&test_runs={test_runs}&window_size={window_size}"
         response = requests.get(url)
         return response
 
@@ -450,49 +446,41 @@ class StockAITestView(GenericAPIView):
             stock = weekly_recommendation_stock.stock
             stock_srtn_code = stock.srtn_code
 
-            # 각 주식에 대해 testruns를 1로 하여 10번 요청 실행
-            for _ in range(1):
-                self.save_test_result(stock, stock_srtn_code, test_formatted_date, latest_weekly_recommendation)
+            # 각 주식에 대해 testruns를 1로 하여 10번 요청 실행하고 평균 저장
+            self.calculate_and_save_average_profit(stock, stock_srtn_code, test_formatted_date, latest_weekly_recommendation)
 
         return {"message": "Weekly stocks tested and saved successfully"}
 
-    def save_test_result(self, stock, stock_srtn_code, test_formatted_date, latest_weekly_recommendation):
+    def calculate_and_save_average_profit(self, stock, stock_srtn_code, test_formatted_date, latest_weekly_recommendation):
         """
-        외부 API를 호출하여 테스트 후 결과를 저장하는 함수
+        10번의 테스트를 실행하고, 평균 profit 값을 저장하는 함수
         """
-        # 각 요청을 testruns=1로 설정하여 동기 요청
-        response = self.start_testing(stock_srtn_code, test_formatted_date, 1, 10)
-        if response.status_code == 200:
-            test_result_data = response.json()
-            self.save_test_result_to_db(stock, test_result_data, latest_weekly_recommendation)
+        profits = []  # profit 값을 저장할 리스트
 
-    def save_test_result_to_db(self, stock, test_result_data, latest_weekly_recommendation):
+        for _ in range(10):
+            response = self.start_testing(stock.srtn_code, test_formatted_date, 1, 10)
+            if response.status_code == 200:
+                test_result_data = response.json()
+                profit = test_result_data.get('average_profit')
+                if profit is not None:
+                    profits.append(float(profit))
+
+        # profit 리스트에 값이 있는 경우 평균을 계산하여 저장
+        if profits:
+            average_profit = sum(profits) / len(profits)  # 평균 계산
+
+            # 평균 profit 값을 데이터베이스에 저장
+            self.save_test_result_to_db(stock, average_profit, latest_weekly_recommendation)
+
+    def save_test_result_to_db(self, stock, average_profit, latest_weekly_recommendation):
         """
-        테스트 결과를 데이터베이스에 저장
+        평균 profit 값을 데이터베이스에 저장하는 함수
         """
-        # 각 테스트 요청에서 반환된 profit 값 저장
         WeeklyRecommendationStockTestResult.objects.create(
-            profit=test_result_data.get('average_profit'),  # 사실상 이름이 average profit이지만 단일 테스트 결과로 저장
+            profit=average_profit,  # 10번 테스트의 평균 profit 저장
             stock=stock,
             weekly_recommendation=latest_weekly_recommendation,
         )
-
-    def calculate_final_profit(self, stock, start_date):
-        """
-        주식의 테스트 결과들을 모두 불러와서 합산 또는 평균 계산
-        """
-        weekly_recommendation = WeeklyRecommendation.objects.get(start_date=start_date)
-
-        # 해당 주식의 모든 profit 데이터를 불러와서 합산 또는 평균 계산
-        all_profits = WeeklyRecommendationStockTestResult.objects.filter(
-            stock=stock,
-            weekly_recommendation=weekly_recommendation
-        ).values_list('profit', flat=True)
-
-        # profit들의 평균을 계산
-        average_profit = sum(all_profits) / len(all_profits) if all_profits else 0
-
-        return average_profit
 
 
 class StockAIPredictView(GenericAPIView):
@@ -506,7 +494,7 @@ class StockAIPredictView(GenericAPIView):
         """
         Django에서 외부 API로 예측 요청을 보냄
         """
-        url = f"http://127.0.0.1:8080/api/predict/?stock={stock_name}&days_ago={days_ago}&window_size={window_size}"
+        url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/predict/?stock={stock_name}&days_ago={days_ago}&window_size={window_size}"
         response = requests.get(url)
         return response
 
@@ -549,3 +537,54 @@ class StockAIPredictView(GenericAPIView):
             action=prediction_result_data.get('action'),
             target_date=prediction_result_data.get('target_date')
         )
+
+
+class StockAITestResultView(GenericAPIView):
+
+    def get(self, request, isin_code):
+        # ISIN 코드로 Stock 엔티티 조회
+        stock = Stock.objects.get(isin_code=isin_code)
+
+        # Stock과 관련된 WeeklyRecommendation 중 가장 최신의 주차 추천을 가져옴
+        latest_weekly_recommendation = WeeklyRecommendation.objects.filter(
+            weeklyrecommendationstock__stock=stock
+        ).order_by('-start_date').first()
+
+        if latest_weekly_recommendation:
+            # 해당 WeeklyRecommendation을 기준으로 가장 최신의 TestResult 가져오기
+            latest_test_result = WeeklyRecommendationStockTestResult.objects.filter(
+                stock=stock,
+                weekly_recommendation=latest_weekly_recommendation
+            ).order_by('-id').first()
+
+            if latest_test_result:
+                return Response({
+                    'stock': stock.isin_code,
+                    'weekly_recommendation': f"{latest_weekly_recommendation.start_date} - {latest_weekly_recommendation.end_date}",
+                    'average_profit': latest_test_result.profit,
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({'error': 'No test result found for the given stock.'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'error': 'No weekly recommendation found for the given stock.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+# PredictResult 조회 뷰
+class StockAIPredictResultView(GenericAPIView):
+
+    def get(self, request, isin_code):
+        # ISIN 코드로 Stock 엔티티 조회
+        stock = Stock.objects.get(isin_code=isin_code)
+
+        # 해당 Stock과 관련된 PredictionResult 중 가장 최근 target_date가 있는 결과 조회
+        latest_predict_result = WeeklyRecommendationStockPredictResult.objects.filter(
+            stock=stock
+        ).order_by('-target_date').first()
+
+        if latest_predict_result:
+            return Response({
+                'action': latest_predict_result.action,
+                'target_date': latest_predict_result.target_date,
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({'error': 'No prediction result found for the given stock.'}, status=status.HTTP_404_NOT_FOUND)

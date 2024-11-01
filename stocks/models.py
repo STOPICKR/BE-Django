@@ -15,10 +15,10 @@ class Stock(models.Model):
 # 주식 종목 일별 데이터
 class DailyStockData(models.Model):
     bas_dt = models.DateField(null=False, verbose_name="기준일자")  # 기준일자
-    clpr = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="종가")
-    hipr = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="고가")
-    lopr = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="저가")
-    mkp = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="시가")
+    clpr = models.IntegerField(verbose_name="종가")
+    hipr = models.IntegerField(verbose_name="고가")
+    lopr = models.IntegerField(verbose_name="저가")
+    mkp = models.IntegerField(verbose_name="시가")
     vs = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="대비")
     flt_rt = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="등락률")
     trqu = models.BigIntegerField(verbose_name="거래량")

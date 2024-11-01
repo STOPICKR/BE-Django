@@ -12,10 +12,10 @@ class StockSerializer(serializers.Serializer):
 class DailyStockDataSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     bas_dt = serializers.DateField()
-    clpr = serializers.DecimalField(max_digits=10, decimal_places=2)
-    hipr = serializers.DecimalField(max_digits=10, decimal_places=2)
-    lopr = serializers.DecimalField(max_digits=10, decimal_places=2)
-    mkp = serializers.DecimalField(max_digits=10, decimal_places=2)
+    clpr = serializers.IntegerField()
+    hipr = serializers.IntegerField()
+    lopr = serializers.IntegerField()
+    mkp = serializers.IntegerField()
     vs = serializers.DecimalField(max_digits=10, decimal_places=2)
     flt_rt = serializers.DecimalField(max_digits=10, decimal_places=2)
     trqu = serializers.IntegerField()
@@ -38,3 +38,4 @@ class WeeklyRecommendationSerializer(serializers.Serializer):
 class WeeklyRecommendationStockSerializer(serializers.Serializer):
     weekly_stock_recommendation_id = serializers.IntegerField()
     stock_id = serializers.IntegerField()
+

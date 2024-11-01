@@ -1,7 +1,8 @@
 from django.urls import path
 
 from stocks.views import FetchAllStocksInfoView, StockSearchView, AddStockToWeeklyView, WeeklyRecommendationStocksView, \
-    FetchWeeklyStockDailyDataView, LatestWeeklyStocksDataView, StockAITestView, StockAIPredictView
+    FetchWeeklyStockDailyDataView, LatestWeeklyStocksDataView, StockAITestView, StockAIPredictView, \
+    StockAITestResultView, StockAIPredictResultView
 
 urlpatterns = [
     # 주식 검색
@@ -20,4 +21,9 @@ urlpatterns = [
     path('weekly/latest/test/', StockAITestView.as_view(), name='latest_weekly_stocks_test'),
     # 최신 주차별 주식 데이터 predict(Post)
     path('weekly/latest/predict/', StockAIPredictView.as_view(), name='latest_weekly_stocks_predict'),
+
+    # 최신 주차별 주식 데이터 test(Get)
+    path('weekly/latest/test/<str:isin_code>', StockAITestResultView.as_view(), name='latest_weekly_stocks_test'),
+    # 최신 주차별 주식 데이터 predict(Get)
+    path('weekly/latest/predict/<str:isin_code>', StockAIPredictResultView.as_view(), name='latest_weekly_stocks_predict'),
 ]
