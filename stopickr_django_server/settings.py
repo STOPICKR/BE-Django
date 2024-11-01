@@ -18,6 +18,9 @@ from django.core.exceptions import ImproperlyConfigured
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# STATIC_ROOT 설정 추가
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -42,20 +45,20 @@ DATABASE_USER = get_secret("DATABASE_USER")
 DATABASE_PASSWORD = get_secret("DATABASE_PASSWORD")
 DATABASE_HOST = get_secret("DATABASE_HOST")
 DATABASE_PORT = get_secret("DATABASE_PORT")
+AWS_LAMBDA_URL = get_secret("AWS_LAMBDA_URL")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 AUTH_USER_MODEL = "users.User"
 
 ALLOWED_HOSTS = [
-    "stopickr.com",
-    "127.0.0.1",
+    AWS_LAMBDA_URL,
 ]
 
 CORS_ALLOWED_ORIGINS = [
     "https://stopickr.com",
-    "http://localhost:3000",
+    "http://stopickr.com",
 ]
 
 # Application definition

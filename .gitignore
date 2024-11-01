@@ -386,3 +386,5 @@ pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,pycharm+all,django,python
 /secrets.json
+/zappa_settings.json
+/requirements.txt
