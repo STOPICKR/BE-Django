@@ -16,8 +16,19 @@ class UserManager(BaseUserManager):
             email=email, password=make_password(password), **extra_fields
         )
 
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
 
-class User(AbstractBaseUser):
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Superuser must have is_staff=True.")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Superuser must have is_superuser=True.")
+
+        return self.create_user(email, password, **extra_fields)
+
+
+class User(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(
         verbose_name="이름",
         max_length=50,
@@ -44,13 +55,21 @@ class User(AbstractBaseUser):
         verbose_name="계정 활성 여부",
         default=True,
     )
-
+    is_staff = models.BooleanField(
+        verbose_name="스태프 권한",
+        default=False,
+    )
+    is_superuser = models.BooleanField(
+        verbose_name="관리자 권한",
+        default=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     objects = UserManager()
 
     USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["name"]
 
     class Meta:
         db_table = "users"
