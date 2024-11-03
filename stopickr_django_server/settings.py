@@ -18,9 +18,6 @@ from django.core.exceptions import ImproperlyConfigured
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# STATIC_ROOT 설정 추가
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -40,12 +37,43 @@ def get_secret(setting, secrets=secrets):
 
 PUBLIC_DATA_SECRET_KEY = get_secret("PUBLIC_DATA_SECRET_KEY")
 SECRET_KEY = get_secret("SECRET_KEY")
+
+# postgresql 를 위한 Settings
 DATABASE_NAME = get_secret("DATABASE_NAME")
 DATABASE_USER = get_secret("DATABASE_USER")
 DATABASE_PASSWORD = get_secret("DATABASE_PASSWORD")
 DATABASE_HOST = get_secret("DATABASE_HOST")
 DATABASE_PORT = get_secret("DATABASE_PORT")
+
+# AWS Lambda 를 위한 Settings
 AWS_LAMBDA_URL = get_secret("AWS_LAMBDA_URL")
+
+# AWS admin css 를 위한 Setting
+AWS_REGION = 'ap-northeast-2'
+AWS_STORAGE_BUCKET_NAME = get_secret("AWS_STORAGE_BUCKET_NAME")
+AWS_QUERYSTRING_AUTH = False
+AWS_S3_HOST = 's3.%s.amazonaws.com' % AWS_REGION
+AWS_ACCESS_KEY_ID = get_secret("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = get_secret("AWS_SECRET_ACCESS_KEY")
+AWS_S3_CUSTOM_DOMAIN = '%s.s3.amazonaws.com' % AWS_STORAGE_BUCKET_NAME
+
+
+STATICFILES_LOCATION = 'static'
+MEDIAFILES_LOCATION = 'media'
+
+# Static Setting
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+STATICFILES_DIRS = [STATIC_DIR]
+
+# STATIC_ROOT 설정 추가
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles/')
+STATIC_URL = "https://%s/" % AWS_S3_CUSTOM_DOMAIN
+STATICFILES_STORAGE = 'stopickr_django_server.storages.StaticStorage'
+
+#Media Setting
+MEDIA_URL = "https://%s/" % AWS_S3_CUSTOM_DOMAIN
+DEFAULT_FILE_STORAGE = 'stopickr_django_server.storages.MediaStorage'
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
@@ -54,7 +82,6 @@ AUTH_USER_MODEL = "users.User"
 
 ALLOWED_HOSTS = [
     AWS_LAMBDA_URL,
-    "localhost",
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -74,8 +101,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # 사용자 정의 apps
     "users",
-    'stocks'
+    'stocks',
+    # AWS S3
+    'storages',
+    's3'
 ]
 
 MIDDLEWARE = [
@@ -112,23 +143,23 @@ WSGI_APPLICATION = 'stopickr_django_server.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
-
 # DATABASES = {
 #     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': DATABASE_NAME,
-#         'USER': DATABASE_USER,
-#         'PASSWORD': DATABASE_PASSWORD,
-#         'HOST': DATABASE_HOST,
-#         'PORT': DATABASE_PORT,
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
 #     }
 # }
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': DATABASE_NAME,
+        'USER': DATABASE_USER,
+        'PASSWORD': DATABASE_PASSWORD,
+        'HOST': DATABASE_HOST,
+        'PORT': DATABASE_PORT,
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -161,8 +192,6 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
-
-STATIC_URL = 'static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
