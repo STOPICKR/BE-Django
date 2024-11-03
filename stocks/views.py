@@ -27,9 +27,16 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+"""
+admin 용 api view
+"""
+
+
 # 주식 이름으로 검색 (admin 용)
 class StockSearchView(GenericAPIView):
     serializer_class = StockSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
 
     def get(self, request):
         query = request.GET.get('query')
@@ -54,7 +61,7 @@ class StockSearchView(GenericAPIView):
 class FetchAllStocksInfoView(GenericAPIView):
     serializer_class = StockSerializer
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAdminUser]  # 관리자 권한 사용자만 접근 가능
+    permission_classes = [IsAdminUser]
 
     def post(self, request):
         if not request.user.is_staff:  # 추가로 관리자 권한 확인
@@ -125,46 +132,10 @@ class FetchAllStocksInfoView(GenericAPIView):
                     raise DatabaseSaveFailureException()
 
 
-# 주차별 추천 주식 불러오기
-class WeeklyRecommendationStocksView(GenericAPIView):
-    serializer_class = StockSerializer
-
-    def get(self, request):
-        # URL 파라미터로부터 시작 날짜 받기
-        start_date_str = request.GET.get('startDate')
-
-        if not start_date_str:
-            return Response({"error": "시작 날짜를 제공해야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            # 받은 날짜 문자열을 datetime 객체로 변환
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        except ValueError:
-            return Response({"error": "날짜 형식이 잘못되었습니다. 'YYYY-MM-DD' 형식이어야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 주차별 주식 가져오기
-        weekly_stocks = self.get_weekly_stocks(start_date)
-
-        # 주식 데이터를 직렬화
-        serializer = self.get_serializer(weekly_stocks, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    def get_weekly_stocks(self, start_date):
-        try:
-            weekly_recommendation = WeeklyRecommendation.objects.get(start_date=start_date)
-        except Exception:
-            raise WeeklyRecommendationNotFoundException()
-
-        try:
-            weekly_stocks = WeeklyRecommendationStock.objects.filter(weekly_recommendation=weekly_recommendation).select_related('stock')
-            return [stock_relation.stock for stock_relation in weekly_stocks]
-        except Exception:
-            logger.error(f"error : {str(weekly_recommendation)}")
-            raise StockNotFoundException()
-
-
-# 주차별 추천 리스트에 주식에 추가
+# 주차별 추천 리스트에 주식에 추가 (admin 용)
 class AddStockToWeeklyView(GenericAPIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
 
     def post(self, request, stock_id):
         # URL 파라미터로부터 시작 날짜 받기 (request.GET 사용)
@@ -230,14 +201,156 @@ class AddStockToWeeklyView(GenericAPIView):
 
         try:
             weekly_recommendation = WeeklyRecommendation.objects.get(start_date=start_date)
-            weekly_recommendation_stock = WeeklyRecommendationStock.objects.get(weekly_recommendation=weekly_recommendation, stock=stock)
+            weekly_recommendation_stock = WeeklyRecommendationStock.objects.get(
+                weekly_recommendation=weekly_recommendation, stock=stock)
             weekly_recommendation_stock.delete()
         except Exception:
             logger.error(f"error : {str(weekly_recommendation)}")
             raise WeeklyRecommendationStockDeleteException()
 
 
+# ai test (admin 용)
+class StockAITestView(GenericAPIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        # 주식 테스트 실행
+        self.test_and_save_weekly_stocks()
+        return Response({"message": "주식 테스트 및 예측이 완료되었습니다."}, status=status.HTTP_200_OK)
+
+    def start_testing(self, stock_name, stock_srtn_code, test_runs, window_size):
+        """
+        Django에서 외부 API로 테스트 요청을 보냄
+        """
+        print(f"Sending test request with test_runs={test_runs} for stock {stock_srtn_code}")
+
+        # 외부 API에 테스트 요청을 보냄
+        url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/test/?stock={stock_name}&start_date={stock_srtn_code}&test_runs={test_runs}&window_size={window_size}"
+        response = requests.get(url)
+        return response
+
+    def test_and_save_weekly_stocks(self):
+        try:
+            latest_weekly_recommendation = WeeklyRecommendation.objects.latest('start_date')
+        except ObjectDoesNotExist:
+            return {"error": "No weekly stock recommendations found"}
+
+        start_date = latest_weekly_recommendation.start_date
+        five_years_before_start_date = start_date - timedelta(days=365 * 5)
+        one_year_before_start_date = start_date - timedelta(days=365)
+
+        test_formatted_date = five_years_before_start_date.strftime('%Y-%m-%d')
+        save_formatted_date = one_year_before_start_date.strftime('%Y-%m-%d')
+
+        for weekly_recommendation_stock in WeeklyRecommendationStock.objects.filter(
+                weekly_recommendation=latest_weekly_recommendation):
+            stock = weekly_recommendation_stock.stock
+            stock_srtn_code = stock.srtn_code
+
+            # 각 주식에 대해 testruns를 1로 하여 10번 요청 실행하고 평균 저장
+            self.calculate_and_save_average_profit(stock, stock_srtn_code, test_formatted_date,
+                                                   latest_weekly_recommendation)
+
+        return {"message": "Weekly stocks tested and saved successfully"}
+
+    def calculate_and_save_average_profit(self, stock, stock_srtn_code, test_formatted_date,
+                                          latest_weekly_recommendation):
+        """
+        10번의 테스트를 실행하고, 평균 profit 값을 저장하는 함수
+        """
+        profits = []  # profit 값을 저장할 리스트
+
+        for _ in range(10):
+            response = self.start_testing(stock.srtn_code, test_formatted_date, 1, 10)
+            if response.status_code == 200:
+                test_result_data = response.json()
+                profit = test_result_data.get('average_profit')
+                if profit is not None:
+                    profits.append(float(profit))
+
+        # profit 리스트에 값이 있는 경우 평균을 계산하여 저장
+        if profits:
+            average_profit = sum(profits) / len(profits)  # 평균 계산
+
+            # 평균 profit 값을 데이터베이스에 저장
+            self.save_test_result_to_db(stock, average_profit, latest_weekly_recommendation)
+
+    def save_test_result_to_db(self, stock, average_profit, latest_weekly_recommendation):
+        """
+        평균 profit 값을 데이터베이스에 저장하는 함수
+        """
+        WeeklyRecommendationStockTestResult.objects.create(
+            profit=average_profit,  # 10번 테스트의 평균 profit 저장
+            stock=stock,
+            weekly_recommendation=latest_weekly_recommendation,
+        )
+
+
+# ai predict (admin 용)
+class StockAIPredictView(GenericAPIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        # 주식 예측 실행
+        self.predict_and_save_weekly_stocks()
+        return Response({"message": "주식 테스트 및 예측이 완료되었습니다."}, status=200)
+
+    def start_prediction(self, stock_name, days_ago, window_size):
+        """
+        Django에서 외부 API로 예측 요청을 보냄
+        """
+        url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/predict/?stock={stock_name}&days_ago={days_ago}&window_size={window_size}"
+        response = requests.get(url)
+        return response
+
+    def predict_and_save_weekly_stocks(self):
+        """
+        주차별 추천 주식에 대해 예측하고 결과를 저장하는 함수
+        """
+        try:
+            latest_weekly_recommendation = WeeklyRecommendation.objects.latest('start_date')
+        except ObjectDoesNotExist:
+            return {"error": "No weekly stock recommendations found"}
+
+        for weekly_stock in WeeklyRecommendationStock.objects.filter(
+                weekly_recommendation=latest_weekly_recommendation):
+            stock = weekly_stock.stock
+            stock_name = stock.srtn_code
+
+            # 각 주식에 대해 예측을 실행하고 저장
+            self.save_prediction_result(stock, stock_name, latest_weekly_recommendation)
+
+        return {"message": "Weekly stocks predicted and saved successfully"}
+
+    def save_prediction_result(self, stock, stock_name, latest_weekly_recommendation):
+        """
+        외부 API를 호출하여 예측 후 결과를 저장하는 함수
+        """
+        # 동기 방식으로 예측 요청
+        response = self.start_prediction(stock_name, 0, 10)
+        if response.status_code == 200:
+            prediction_result_data = response.json()
+            self.save_prediction_result_to_db(stock, prediction_result_data, latest_weekly_recommendation)
+
+    def save_prediction_result_to_db(self, stock, prediction_result_data, latest_weekly_recommendation):
+        """
+        예측 결과를 데이터베이스에 저장
+        """
+        # 예측 결과를 데이터베이스에 저장
+        WeeklyRecommendationStockPredictResult.objects.create(
+            stock=stock,
+            weekly_recommendation=latest_weekly_recommendation,
+            action=prediction_result_data.get('action'),
+            target_date=prediction_result_data.get('target_date')
+        )
+
+
+# 주차별 주식 Daily Data Fetch (admin 용)
 class FetchWeeklyStockDailyDataView(GenericAPIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
 
     def post(self, request):
         stock_requests = request.data
@@ -348,6 +461,52 @@ class FetchWeeklyStockDailyDataView(GenericAPIView):
                     raise DatabaseSaveFailureException()
 
 
+# 주차별 추천 주식 불러오기 (admin 용)
+class WeeklyRecommendationStocksView(GenericAPIView):
+    serializer_class = StockSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        # URL 파라미터로부터 시작 날짜 받기
+        start_date_str = request.GET.get('startDate')
+
+        if not start_date_str:
+            return Response({"error": "시작 날짜를 제공해야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 받은 날짜 문자열을 datetime 객체로 변환
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({"error": "날짜 형식이 잘못되었습니다. 'YYYY-MM-DD' 형식이어야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 주차별 주식 가져오기
+        weekly_stocks = self.get_weekly_stocks(start_date)
+
+        # 주식 데이터를 직렬화
+        serializer = self.get_serializer(weekly_stocks, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def get_weekly_stocks(self, start_date):
+        try:
+            weekly_recommendation = WeeklyRecommendation.objects.get(start_date=start_date)
+        except Exception:
+            raise WeeklyRecommendationNotFoundException()
+
+        try:
+            weekly_stocks = WeeklyRecommendationStock.objects.filter(
+                weekly_recommendation=weekly_recommendation).select_related('stock')
+            return [stock_relation.stock for stock_relation in weekly_stocks]
+        except Exception:
+            logger.error(f"error : {str(weekly_recommendation)}")
+            raise StockNotFoundException()
+
+
+"""
+일반 api view
+"""
+
+
 class LatestWeeklyStocksDataView(GenericAPIView):
     serializer_class = DailyStockDataWithStockSerializer
 
@@ -417,134 +576,7 @@ class LatestWeeklyStocksDataView(GenericAPIView):
             raise StockNotFoundException(f"Error retrieving stock data for ISIN code {stock.isin_code}.")
 
 
-class StockAITestView(GenericAPIView):
-
-    def post(self, request):
-        # 주식 테스트 실행
-        self.test_and_save_weekly_stocks()
-        return Response({"message": "주식 테스트 및 예측이 완료되었습니다."}, status=status.HTTP_200_OK)
-
-    def start_testing(self, stock_name, stock_srtn_code, test_runs, window_size):
-        """
-        Django에서 외부 API로 테스트 요청을 보냄
-        """
-        print(f"Sending test request with test_runs={test_runs} for stock {stock_srtn_code}")
-
-        # 외부 API에 테스트 요청을 보냄
-        url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/test/?stock={stock_name}&start_date={stock_srtn_code}&test_runs={test_runs}&window_size={window_size}"
-        response = requests.get(url)
-        return response
-
-    def test_and_save_weekly_stocks(self):
-        try:
-            latest_weekly_recommendation = WeeklyRecommendation.objects.latest('start_date')
-        except ObjectDoesNotExist:
-            return {"error": "No weekly stock recommendations found"}
-
-        start_date = latest_weekly_recommendation.start_date
-        five_years_before_start_date = start_date - timedelta(days=365 * 5)
-        one_year_before_start_date = start_date - timedelta(days=365)
-
-        test_formatted_date = five_years_before_start_date.strftime('%Y-%m-%d')
-        save_formatted_date = one_year_before_start_date.strftime('%Y-%m-%d')
-
-        for weekly_recommendation_stock in WeeklyRecommendationStock.objects.filter(weekly_recommendation=latest_weekly_recommendation):
-            stock = weekly_recommendation_stock.stock
-            stock_srtn_code = stock.srtn_code
-
-            # 각 주식에 대해 testruns를 1로 하여 10번 요청 실행하고 평균 저장
-            self.calculate_and_save_average_profit(stock, stock_srtn_code, test_formatted_date, latest_weekly_recommendation)
-
-        return {"message": "Weekly stocks tested and saved successfully"}
-
-    def calculate_and_save_average_profit(self, stock, stock_srtn_code, test_formatted_date, latest_weekly_recommendation):
-        """
-        10번의 테스트를 실행하고, 평균 profit 값을 저장하는 함수
-        """
-        profits = []  # profit 값을 저장할 리스트
-
-        for _ in range(10):
-            response = self.start_testing(stock.srtn_code, test_formatted_date, 1, 10)
-            if response.status_code == 200:
-                test_result_data = response.json()
-                profit = test_result_data.get('average_profit')
-                if profit is not None:
-                    profits.append(float(profit))
-
-        # profit 리스트에 값이 있는 경우 평균을 계산하여 저장
-        if profits:
-            average_profit = sum(profits) / len(profits)  # 평균 계산
-
-            # 평균 profit 값을 데이터베이스에 저장
-            self.save_test_result_to_db(stock, average_profit, latest_weekly_recommendation)
-
-    def save_test_result_to_db(self, stock, average_profit, latest_weekly_recommendation):
-        """
-        평균 profit 값을 데이터베이스에 저장하는 함수
-        """
-        WeeklyRecommendationStockTestResult.objects.create(
-            profit=average_profit,  # 10번 테스트의 평균 profit 저장
-            stock=stock,
-            weekly_recommendation=latest_weekly_recommendation,
-        )
-
-
-class StockAIPredictView(GenericAPIView):
-
-    def post(self, request):
-        # 주식 예측 실행
-        self.predict_and_save_weekly_stocks()
-        return Response({"message": "주식 테스트 및 예측이 완료되었습니다."}, status=200)
-
-    def start_prediction(self, stock_name, days_ago, window_size):
-        """
-        Django에서 외부 API로 예측 요청을 보냄
-        """
-        url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/predict/?stock={stock_name}&days_ago={days_ago}&window_size={window_size}"
-        response = requests.get(url)
-        return response
-
-    def predict_and_save_weekly_stocks(self):
-        """
-        주차별 추천 주식에 대해 예측하고 결과를 저장하는 함수
-        """
-        try:
-            latest_weekly_recommendation = WeeklyRecommendation.objects.latest('start_date')
-        except ObjectDoesNotExist:
-            return {"error": "No weekly stock recommendations found"}
-
-        for weekly_stock in WeeklyRecommendationStock.objects.filter(weekly_recommendation=latest_weekly_recommendation):
-            stock = weekly_stock.stock
-            stock_name = stock.srtn_code
-
-            # 각 주식에 대해 예측을 실행하고 저장
-            self.save_prediction_result(stock, stock_name, latest_weekly_recommendation)
-
-        return {"message": "Weekly stocks predicted and saved successfully"}
-
-    def save_prediction_result(self, stock, stock_name, latest_weekly_recommendation):
-        """
-        외부 API를 호출하여 예측 후 결과를 저장하는 함수
-        """
-        # 동기 방식으로 예측 요청
-        response = self.start_prediction(stock_name, 0, 10)
-        if response.status_code == 200:
-            prediction_result_data = response.json()
-            self.save_prediction_result_to_db(stock, prediction_result_data, latest_weekly_recommendation)
-
-    def save_prediction_result_to_db(self, stock, prediction_result_data, latest_weekly_recommendation):
-        """
-        예측 결과를 데이터베이스에 저장
-        """
-        # 예측 결과를 데이터베이스에 저장
-        WeeklyRecommendationStockPredictResult.objects.create(
-            stock=stock,
-            weekly_recommendation=latest_weekly_recommendation,
-            action=prediction_result_data.get('action'),
-            target_date=prediction_result_data.get('target_date')
-        )
-
-
+# TestResult 조회 뷰
 class StockAITestResultView(GenericAPIView):
 
     def get(self, request, isin_code):
@@ -570,9 +602,11 @@ class StockAITestResultView(GenericAPIView):
                     'average_profit': latest_test_result.profit,
                 }, status=status.HTTP_200_OK)
             else:
-                return Response({'error': 'No test result found for the given stock.'}, status=status.HTTP_404_NOT_FOUND)
+                return Response({'error': 'No test result found for the given stock.'},
+                                status=status.HTTP_404_NOT_FOUND)
         else:
-            return Response({'error': 'No weekly recommendation found for the given stock.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'No weekly recommendation found for the given stock.'},
+                            status=status.HTTP_404_NOT_FOUND)
 
 
 # PredictResult 조회 뷰
@@ -593,4 +627,5 @@ class StockAIPredictResultView(GenericAPIView):
                 'target_date': latest_predict_result.target_date,
             }, status=status.HTTP_200_OK)
         else:
-            return Response({'error': 'No prediction result found for the given stock.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'No prediction result found for the given stock.'},
+                            status=status.HTTP_404_NOT_FOUND)

@@ -37,9 +37,13 @@ class StockAdmin(admin.ModelAdmin):
         return redirect("..")
 
 
+class WeeklyRecommendationStockAdmin(admin.ModelAdmin):
+    autocomplete_fields = ['stock']  # Stock 필드를 검색 가능하게 설정
+
+
 admin.site.register(Stock, StockAdmin)
 admin.site.register(DailyStockData)
 admin.site.register(WeeklyRecommendation)
-admin.site.register(WeeklyRecommendationStock)
+admin.site.register(WeeklyRecommendationStock, WeeklyRecommendationStockAdmin)
 admin.site.register(WeeklyRecommendationStockTestResult)
 admin.site.register(WeeklyRecommendationStockPredictResult)
