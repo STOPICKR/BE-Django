@@ -82,6 +82,7 @@ AUTH_USER_MODEL = "users.User"
 
 ALLOWED_HOSTS = [
     AWS_LAMBDA_URL,
+    '127.0.0.1',
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -95,6 +96,7 @@ CORS_ALLOWED_ORIGINS = [
 INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
+    'rest_framework.authtoken',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -202,5 +204,9 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
-    ]
+        'rest_framework.authentication.SessionAuthentication',  # Django 세션 인증
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',  # 인증된 사용자만 접근 가능
+    ],
 }

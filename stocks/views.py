@@ -3,9 +3,11 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode
 import requests
 from django.core.exceptions import ObjectDoesNotExist
-from rest_framework.exceptions import APIException
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.exceptions import APIException, PermissionDenied
 
 from rest_framework.generics import GenericAPIView
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -51,8 +53,12 @@ class StockSearchView(GenericAPIView):
 # 공공 데이터 포탈에서 한국 주식 정보 받아오기 (admin 용)
 class FetchAllStocksInfoView(GenericAPIView):
     serializer_class = StockSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]  # 관리자 권한 사용자만 접근 가능
 
     def post(self, request):
+        if not request.user.is_staff:  # 추가로 관리자 권한 확인
+            raise PermissionDenied("관리자만 이 작업을 수행할 수 있습니다.")
         try:
             self.fetch_and_save_all_stocks_info()
             return Response({"message": "모든 주식 기본 정보가 저장됐습니다."}, status=status.HTTP_200_OK)
