@@ -61,6 +61,9 @@ class WeeklyRecommendationStock(models.Model):
 
 class WeeklyRecommendationStockTestResult(models.Model):
     profit = models.DecimalField(max_digits=10, decimal_places=2)
+    test_start_date = models.DateField(null=True, verbose_name="테스트 시작 날짜")
+    test_end_date = models.DateField(null=True, verbose_name="테스트 종료 날짜")
+    test_starting_cash = models.IntegerField(null=True, verbose_name="테스트 시작 자본금")
     stock = models.ForeignKey(
         Stock,
         on_delete=models.CASCADE,

@@ -213,20 +213,22 @@ class AddStockToWeeklyView(GenericAPIView):
 class StockAITestView(GenericAPIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAdminUser]
+    # permission_classes = [AllowAny]
 
     def post(self, request):
         # 주식 테스트 실행
         self.test_and_save_weekly_stocks()
         return Response({"message": "주식 테스트 및 예측이 완료되었습니다."}, status=status.HTTP_200_OK)
 
-    def start_testing(self, stock_name, stock_srtn_code, test_runs, window_size):
+    def start_testing(self, stock_name, stock_srtn_code, test_runs, window_size, test_starting_cash):
         """
         Django에서 외부 API로 테스트 요청을 보냄
         """
         print(f"Sending test request with test_runs={test_runs} for stock {stock_srtn_code}")
 
         # 외부 API에 테스트 요청을 보냄
-        url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/test/?stock={stock_name}&start_date={stock_srtn_code}&test_runs={test_runs}&window_size={window_size}"
+        # url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/test/?stock={stock_name}&start_date={stock_srtn_code}&test_runs={test_runs}&window_size={window_size}&test_starting_cash={test_starting_cash}"
+        url = f"http://127.0.0.1:8080/api/test/?stock={stock_name}&start_date={stock_srtn_code}&test_runs={test_runs}&window_size={window_size}&test_starting_cash={test_starting_cash}"
         response = requests.get(url)
         return response
 
@@ -238,31 +240,52 @@ class StockAITestView(GenericAPIView):
 
         start_date = latest_weekly_recommendation.start_date
         five_years_before_start_date = start_date - timedelta(days=365 * 5)
-        one_year_before_start_date = start_date - timedelta(days=365)
+        end_date = datetime.now().date()
+
+        # 앞뒤 50일 제외
+        adjusted_start_date = five_years_before_start_date + timedelta(days=50)
+        adjusted_end_date = end_date - timedelta(days=50)
+
+        # 남은 구간의 20%를 테스트 기간으로 설정
+        adjusted_days = (adjusted_end_date - adjusted_start_date).days
+        test_period_days = int(adjusted_days * 0.2)
+        test_start_date = adjusted_end_date - timedelta(days=test_period_days)
+        test_end_date = adjusted_end_date
 
         test_formatted_date = five_years_before_start_date.strftime('%Y-%m-%d')
-        save_formatted_date = one_year_before_start_date.strftime('%Y-%m-%d')
+        test_formatted_start_date = test_start_date.strftime('%Y-%m-%d')
+        test_formatted_end_date = test_end_date.strftime('%Y-%m-%d')
 
         for weekly_recommendation_stock in WeeklyRecommendationStock.objects.filter(
                 weekly_recommendation=latest_weekly_recommendation):
             stock = weekly_recommendation_stock.stock
             stock_srtn_code = stock.srtn_code
 
+            # 최근 일자의 시가를 가져옴
+            test_starting_cash = self.get_test_starting_cash(stock)
+
             # 각 주식에 대해 testruns를 1로 하여 10번 요청 실행하고 평균 저장
-            self.calculate_and_save_average_profit(stock, stock_srtn_code, test_formatted_date,
-                                                   latest_weekly_recommendation)
+            self.calculate_and_save_average_profit(stock, stock_srtn_code, test_formatted_date, test_formatted_start_date, test_formatted_end_date,
+                                                   latest_weekly_recommendation, test_starting_cash)
 
         return {"message": "Weekly stocks tested and saved successfully"}
 
-    def calculate_and_save_average_profit(self, stock, stock_srtn_code, test_formatted_date,
-                                          latest_weekly_recommendation):
+    def get_test_starting_cash(self, stock):
+        # DailyStockData에서 해당 주식의 가장 최근 일자의 시가를 가져옴
+        latest_data = DailyStockData.objects.filter(stock=stock).order_by('-bas_dt').first()
+        if latest_data:
+            return latest_data.mkp * 500  # 시가의 500배를 반환
+        return 0  # 시가 정보가 없을 경우 0 반환
+
+    def calculate_and_save_average_profit(self, stock, stock_srtn_code, test_formatted_date, test_formatted_start_date, test_formatted_end_date,
+                                          latest_weekly_recommendation, test_starting_cash):
         """
         10번의 테스트를 실행하고, 평균 profit 값을 저장하는 함수
         """
         profits = []  # profit 값을 저장할 리스트
 
         for _ in range(10):
-            response = self.start_testing(stock.srtn_code, test_formatted_date, 1, 10)
+            response = self.start_testing(stock.srtn_code, test_formatted_date, 1, 10, test_starting_cash)
             if response.status_code == 200:
                 test_result_data = response.json()
                 profit = test_result_data.get('average_profit')
@@ -274,14 +297,17 @@ class StockAITestView(GenericAPIView):
             average_profit = sum(profits) / len(profits)  # 평균 계산
 
             # 평균 profit 값을 데이터베이스에 저장
-            self.save_test_result_to_db(stock, average_profit, latest_weekly_recommendation)
+            self.save_test_result_to_db(stock, average_profit, latest_weekly_recommendation, test_formatted_start_date, test_formatted_end_date, test_starting_cash)
 
-    def save_test_result_to_db(self, stock, average_profit, latest_weekly_recommendation):
+    def save_test_result_to_db(self, stock, average_profit, latest_weekly_recommendation, test_formatted_start_date, test_formatted_end_date, test_starting_cash):
         """
         평균 profit 값을 데이터베이스에 저장하는 함수
         """
         WeeklyRecommendationStockTestResult.objects.create(
             profit=average_profit,  # 10번 테스트의 평균 profit 저장
+            test_start_date=test_formatted_start_date,
+            test_end_date=test_formatted_end_date,
+            test_starting_cash=test_starting_cash,
             stock=stock,
             weekly_recommendation=latest_weekly_recommendation,
         )
@@ -291,6 +317,7 @@ class StockAITestView(GenericAPIView):
 class StockAIPredictView(GenericAPIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAdminUser]
+    # permission_classes = [AllowAny]
 
     def post(self, request):
         # 주식 예측 실행
@@ -302,6 +329,7 @@ class StockAIPredictView(GenericAPIView):
         Django에서 외부 API로 예측 요청을 보냄
         """
         url = f"https://sqxle43k4j.execute-api.ap-northeast-2.amazonaws.com/default/api/predict/?stock={stock_name}&days_ago={days_ago}&window_size={window_size}"
+        # url = f"http://127.0.0.1:8080/api/predict/?stock={stock_name}&days_ago={days_ago}&window_size={window_size}"
         response = requests.get(url)
         return response
 
@@ -351,6 +379,7 @@ class StockAIPredictView(GenericAPIView):
 class FetchWeeklyStockDailyDataView(GenericAPIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAdminUser]
+    # permission_classes = [AllowAny]
 
     def post(self, request):
         # 최신 주차의 주식 추천 리스트 가져오기
@@ -611,6 +640,9 @@ class StockAITestResultView(GenericAPIView):
                     'stock': stock.isin_code,
                     'weekly_recommendation': f"{latest_weekly_recommendation.start_date} - {latest_weekly_recommendation.end_date}",
                     'average_profit': latest_test_result.profit,
+                    'test_start_date': latest_test_result.test_start_date,
+                    'test_end_date': latest_test_result.test_end_date,
+                    'test_starting_cash': latest_test_result.test_starting_cash,
                 }, status=status.HTTP_200_OK)
             else:
                 return Response({'error': 'No test result found for the given stock.'},
