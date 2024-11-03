@@ -7,7 +7,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.exceptions import APIException, PermissionDenied
 
 from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAdminUser, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -353,17 +353,15 @@ class FetchWeeklyStockDailyDataView(GenericAPIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request):
-        stock_requests = request.data
-
-        if len(stock_requests) != 10:
-            return Response({"error": "10개의 주식을 선택해야 데이터를 저장할 수 있습니다."}, status=status.HTTP_400_BAD_REQUEST)
+        # 최신 주차의 주식 추천 리스트 가져오기
+        latest_weekly_recommendation = self.get_latest_weekly_recommendation()
+        weekly_stocks = WeeklyRecommendationStock.objects.filter(
+            weekly_recommendation=latest_weekly_recommendation
+        ).select_related('stock')
 
         try:
-            for stock_request in stock_requests:
-                isin_cd = stock_request.get('isinCd')
-
-                if not (isin_cd):
-                    return Response({"error": "주식 코드가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+            for weekly_stock in weekly_stocks:
+                isin_cd = weekly_stock.stock.isin_code
 
                 # 주식 데이터를 가져와 저장하는 함수 호출
                 self.fetch_and_save_stock_data_by_code_and_date(isin_cd)
@@ -373,6 +371,17 @@ class FetchWeeklyStockDailyDataView(GenericAPIView):
         except (ApiRequestFailureException, ApiResponseParseFailureException, DatabaseSaveFailureException) as e:
             logger.error(f"주식 데이터를 저장하는 중 오류 발생: {str(e)}")
             return Response({"error": "주식 데이터를 저장하는 중 오류가 발생했습니다."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def get_latest_weekly_recommendation(self):
+        """
+        최신 WeeklyRecommendation을 반환하는 함수
+        """
+        try:
+            WeeklyRecommendation.objects.latest('start_date')
+            return WeeklyRecommendation.objects.latest('start_date')
+        except WeeklyRecommendation.DoesNotExist:
+            logger.info("주식 추천 목록이 없습니다")
+            raise StockNotFoundException("추천 주식 목록이 없습니다.")
 
     def fetch_and_save_stock_data_by_code_and_date(self, isin_cd):
         """
@@ -509,6 +518,7 @@ class WeeklyRecommendationStocksView(GenericAPIView):
 
 class LatestWeeklyStocksDataView(GenericAPIView):
     serializer_class = DailyStockDataWithStockSerializer
+    permission_classes = [AllowAny]
 
     def get(self, request):
         try:
@@ -578,6 +588,7 @@ class LatestWeeklyStocksDataView(GenericAPIView):
 
 # TestResult 조회 뷰
 class StockAITestResultView(GenericAPIView):
+    permission_classes = [AllowAny]
 
     def get(self, request, isin_code):
         # ISIN 코드로 Stock 엔티티 조회
@@ -611,6 +622,7 @@ class StockAITestResultView(GenericAPIView):
 
 # PredictResult 조회 뷰
 class StockAIPredictResultView(GenericAPIView):
+    permission_classes = [AllowAny]
 
     def get(self, request, isin_code):
         # ISIN 코드로 Stock 엔티티 조회

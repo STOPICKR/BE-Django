@@ -21,7 +21,7 @@ urlpatterns = [
     path('weekly/<int:stock_id>', AddStockToWeeklyView.as_view(), name='add_weekly_stock'),
 
     # 전체 주식 정보 가져오기 (POST)
-    path('weekly/daily-data', FetchWeeklyStockDailyDataView.as_view(), name='stock_info'),
+    path('weekly/daily-data/', FetchWeeklyStockDailyDataView.as_view(), name='stock_info'),
 
     # 최신 주차별 주식 데이터 test(Post)
     path('weekly/latest/test/', StockAITestView.as_view(), name='latest_weekly_stocks_test'),
